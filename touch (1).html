@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Expérience Tactile Zen Intégrée</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    #closeBtn {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+      z-index: 1000;
+      transition: transform 0.3s ease;
+    }
+    #closeBtn:hover {
+      transform: scale(1.1);
+    }
+    #closeBtn::before,
+    #closeBtn::after {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 2px;
+      background-color: currentColor;
+      top: 50%;
+      left: 0;
+      transition: background-color 0.5s ease;
+    }
+    #closeBtn::before {
+      transform: rotate(45deg);
+    }
+    #closeBtn::after {
+      transform: rotate(-45deg);
+    }
+  </style>
+</head>
+<body>
+  <div id="closeBtn"></div>
+  <canvas id="canvas"></canvas>
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    // Adapter le canvas à la taille de l'écran
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    // Contexte audio - création différée
+    let audioCtx = null;
+    
+    // Initialiser l'audio uniquement lors de la première interaction utilisateur
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+      }
+    }
+
+    // Tableau pour suivre les oscillateurs actifs - limité pour éviter les doublons sonores
+    let activeOscillators = [];
+    // Compteur pour suivre le nombre de doigts actifs
+    let activeTouchCount = 0;
+    
+    // Variable pour limiter le nombre d'oscillateurs
+    const MAX_OSCILLATORS = 10;
+
+    // Fonction pour jouer un son de bulle avec fade out sur 1 seconde
+    function playBubbleSound(gainValue = 0.1) {
+      if (!audioCtx) return;
+      
+      // Limiter le nombre d'oscillateurs actifs pour éviter les grésillements
+      if (activeOscillators.length >= MAX_OSCILLATORS) {
+        // Arrêter l'oscillateur le plus ancien
+        const oldest = activeOscillators.shift();
+        try {
+          oldest.gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+          oldest.oscillator.stop(audioCtx.currentTime + 0.2);
+        } catch (e) {
+          // Ignorer les erreurs si l'oscillateur est déjà arrêté
+        }
+      }
+      
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      // Ajouter un filtre passe-bas pour adoucir le son
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 1000;
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(300 + Math.random() * 50, audioCtx.currentTime);
+      
+      // Connecter avec le filtre
+      oscillator.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      // Atténuer le volume initial pour éviter les clics
+      gainNode.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(gainValue, audioCtx.currentTime + 0.05);
+      // Fade out sur 1 seconde
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1);
+      
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 1);
+      
+      // Ajouter au tableau des oscillateurs actifs
+      activeOscillators.push({ oscillator, gainNode });
+      
+      // Supprimer du tableau après 1.1 secondes
+      setTimeout(() => {
+        const index = activeOscillators.findIndex(o => o.oscillator === oscillator);
+        if (index !== -1) {
+          activeOscillators.splice(index, 1);
+        }
+      }, 1100);
+    }
+
+    // Classe pour gérer l'animation des bulles
+    class Bubble {
+      constructor(x, y, small = false) {
+        this.x = x;
+        this.y = y;
+        this.radius = 0;
+        // Pour les bulles créées lors du glissement (small=true) ou spontanées
+        this.maxRadius = small ? (30 + Math.random() * 20) : (50 + Math.random() * 50);
+        this.growth = small ? (1 + Math.random() * 0.5) : (2 + Math.random());
+        this.alpha = 1;
+        this.color = `hsl(${Math.floor(currentHue + Math.random() * 40 - 20)}, 80%, 60%)`;
+      }
+      update() {
+        this.radius += this.growth;
+        // Utilisation d'une fonction d'assouplissement pour un fade out plus progressif
+        let progress = this.radius / this.maxRadius;
+        this.alpha = Math.max(1 - progress * progress, 0);
+      }
+      draw(ctx) {
+        // Sauvegarder l'état du contexte avant de modifier globalAlpha
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.closePath();
+        // Restaurer l'état du contexte après avoir dessiné la bulle
+        ctx.restore();
+      }
+    }
+
+    // Augmenter la limite du nombre maximal de bulles
+    const MAX_BUBBLES = 300;
+    let bubbles = [];
+
+    // Crée une bulle et joue le son associé (si playSoundFlag est vrai)
+    function createBubble(x, y, small = false, playSoundFlag = true) {
+      // Si trop de bulles, supprimer les plus anciennes
+      if (bubbles.length > MAX_BUBBLES) {
+        bubbles = bubbles.slice(-MAX_BUBBLES/2);
+      }
+      
+      bubbles.push(new Bubble(x, y, small));
+      
+      // On ne joue le son que si playSoundFlag est vrai ET s'il n'y a qu'un seul touch actif
+      // Cela permet d'éviter les sons multiples
+      if (playSoundFlag && audioCtx && activeTouchCount <= 1) {
+        playBubbleSound(small ? 0.05 : 0.03); // Réduire légèrement le volume
+      }
+    }
+
+    // Variables pour la gestion de l'interaction tactile/glissement
+    let isDragging = false;
+    let activeTouches = new Map(); // Utiliser une Map pour stocker les touches actives
+    let currentX = 0, currentY = 0;
+    let previousX = 0, previousY = 0;
+    let dragInterval = null;
+    let hue = 0;
+    
+    // Variable pour la teinte actuelle du fond et des bulles
+    let currentHue = 190; // Commence avec un bleu apaisant
+
+    // Variables pour le son continu durant le glissement
+    let continuousOscillator = null;
+    let continuousGain = null;
+    let continuousFilter = null;
+
+    // Démarrer le son continu avec une onde sinusoïdale douce
+    function startContinuousSound(frequency) {
+      if (!audioCtx) return;
+      
+      // S'assurer d'arrêter tout son continu précédent
+      stopContinuousSound();
+      
+      continuousOscillator = audioCtx.createOscillator();
+      continuousGain = audioCtx.createGain();
+      continuousFilter = audioCtx.createBiquadFilter();
+      
+      // Configurer le filtre passe-bas
+      continuousFilter.type = "lowpass";
+      continuousFilter.frequency.value = 1200;
+      continuousFilter.Q.value = 1;
+      
+      continuousOscillator.type = 'sine';
+      continuousOscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+      
+      // Connecter avec le filtre
+      continuousOscillator.connect(continuousFilter);
+      continuousFilter.connect(continuousGain);
+      continuousGain.connect(audioCtx.destination);
+      
+      // Démarrer avec un volume faible et augmenter progressivement
+      continuousGain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+      continuousGain.gain.exponentialRampToValueAtTime(0.06, audioCtx.currentTime + 0.3);
+      
+      continuousOscillator.start();
+      
+      // Ajouter au tableau des oscillateurs actifs
+      activeOscillators.push({ oscillator: continuousOscillator, gainNode: continuousGain });
+    }
+
+    // Mettre à jour la fréquence du son continu en fonction de la position verticale
+    function updateContinuousSound(y) {
+      if (continuousOscillator) {
+        const newFreq = 200 + ((canvas.height - y) / canvas.height) * 300;
+        // Transition douce pour éviter les clics
+        continuousOscillator.frequency.exponentialRampToValueAtTime(
+          newFreq, 
+          audioCtx.currentTime + 0.05
+        );
+      }
+    }
+
+    // Arrêter le son continu
+    function stopContinuousSound() {
+      if (continuousOscillator) {
+        // Fade out plus progressif
+        continuousGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        
+        try {
+          continuousOscillator.stop(audioCtx.currentTime + 0.6);
+        } catch (e) {
+          // Ignorer les erreurs si l'oscillateur est déjà arrêté
+        }
+        
+        // Supprimer du tableau après arrêt
+        setTimeout(() => {
+          const index = activeOscillators.findIndex(o => o.oscillator === continuousOscillator);
+          if (index !== -1) {
+            activeOscillators.splice(index, 1);
+          }
+        }, 600);
+        
+        continuousOscillator = null;
+        continuousGain = null;
+        continuousFilter = null;
+      }
+    }
+
+    // Arrêter tous les sons
+    function stopAllSounds() {
+      // Arrêter le son continu
+      stopContinuousSound();
+      
+      // Arrêter tous les oscillateurs actifs
+      activeOscillators.forEach(({ oscillator, gainNode }) => {
+        try {
+          gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+          oscillator.stop(audioCtx.currentTime + 0.2);
+        } catch (e) {
+          // Ignorer les erreurs si l'oscillateur est déjà arrêté
+        }
+      });
+      
+      // Vider le tableau
+      activeOscillators = [];
+    }
+
+    // Limiter la fréquence des mises à jour pendant le glissement
+    let lastDragUpdate = 0;
+    const DRAG_THROTTLE = 20; // 50 FPS (20ms)
+
+    // Mise à jour des coordonnées en fonction de l'événement tactile
+    function updateCoordinatesFromTouch(e) {
+      if (e.touches.length > 0) {
+        // Mettre à jour le compteur de touches actives
+        activeTouchCount = e.touches.length;
+        
+        // N'utiliser que le premier doigt pour les coordonnées principales
+        currentX = e.touches[0].clientX;
+        currentY = e.touches[0].clientY;
+        
+        // Mémoriser tous les points de contact actifs
+        activeTouches.clear(); // Réinitialiser pour éviter les fantômes
+        for (let i = 0; i < e.touches.length; i++) {
+          const touch = e.touches[i];
+          activeTouches.set(touch.identifier, {
+            x: touch.clientX,
+            y: touch.clientY
+          });
+        }
+      }
+    }
+
+    // Mise à jour des coordonnées en fonction de l'événement souris
+    function updateCoordinatesFromMouse(e) {
+      currentX = e.clientX;
+      currentY = e.clientY;
+    }
+
+    // Réagir immédiatement au toucher
+    function startInteraction(e) {
+      e.preventDefault(); // Empêcher le défilement sur les appareils tactiles
+      initAudio(); // Initialiser l'audio au premier toucher
+      
+      isDragging = true;
+      
+      if (e.touches) {
+        updateCoordinatesFromTouch(e);
+      } else {
+        // Pour la souris, nous avons un seul point de contact
+        activeTouchCount = 1;
+        updateCoordinatesFromMouse(e);
+      }
+      
+      previousX = currentX;
+      previousY = currentY;
+      createBubble(currentX, currentY, false);
+      
+      // Si c'est le premier doigt, démarrer le son
+      if (activeTouchCount === 1 && audioCtx) {
+        // Retarder légèrement pour éviter les clics
+        setTimeout(() => {
+          if (isDragging && activeTouchCount === 1) {
+            startContinuousSound(200 + ((canvas.height - currentY) / canvas.height) * 300);
+          }
+        }, 50);
+      }
+      
+      // Créer une bulle immédiatement sans attendre l'intervalle
+      // puis démarrer l'intervalle pour les bulles suivantes
+      if (!dragInterval) {
+        dragInterval = setInterval(() => {
+          if (isDragging) {
+            // Créer plusieurs bulles à chaque intervalle, mais un seul son
+            const shouldPlaySound = activeTouchCount === 1;
+            // Réduire le nombre de bulles générées par intervalle
+            for (let i = 0; i < 2; i++) {
+              const offsetX = (Math.random() - 0.5) * 30;
+              const offsetY = (Math.random() - 0.5) * 30;
+              createBubble(currentX + offsetX, currentY + offsetY, true, shouldPlaySound && i === 0);
+            }
+          }
+        }, 300); // Augmenter l'intervalle pour réduire la charge
+      }
+    }
+
+    // Dessiner une traînée multicolore reliant la position précédente à la nouvelle position
+    function drawTrail() {
+      const now = performance.now();
+      // Limiter la fréquence des mises à jour
+      if (now - lastDragUpdate < DRAG_THROTTLE) return;
+      lastDragUpdate = now;
+      
+      // Calculer la distance entre les points
+      const dx = currentX - previousX;
+      const dy = currentY - previousY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Si la distance est significative, créer des bulles supplémentaires le long du chemin
+      if (distance > 10) {
+        const steps = Math.min(Math.floor(distance / 10), 5);
+        for (let i = 1; i <= steps; i++) {
+          const ratio = i / (steps + 1);
+          const x = previousX + dx * ratio;
+          const y = previousY + dy * ratio;
+          // Pas de son pour les bulles intermédiaires
+          createBubble(x, y, true, false);
+        }
+      }
+      
+      ctx.beginPath();
+      ctx.moveTo(previousX, previousY);
+      ctx.lineTo(currentX, currentY);
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = `hsl(${currentHue}, 80%, 65%)`;
+      ctx.stroke();
+      ctx.closePath();
+      previousX = currentX;
+      previousY = currentY;
+    }
+
+    // Mise à jour lors du déplacement
+    function moveInteraction(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+      
+      if (e.touches) {
+        updateCoordinatesFromTouch(e);
+      } else {
+        updateCoordinatesFromMouse(e);
+      }
+      
+      drawTrail();
+      
+      // Modification ici: Toujours mettre à jour le son, même avec plusieurs doigts
+      // On utilise toujours le premier doigt (currentY) pour contrôler la fréquence
+      if (continuousOscillator) {
+        updateContinuousSound(currentY);
+      }
+    }
+
+    // Gestion des touchmove pour les doigts après le premier
+    function handleTouchMove(e) {
+      if (!isDragging) return;
+      e.preventDefault();
+      
+      // Mettre à jour les positions de tous les doigts
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (activeTouches.has(touch.identifier)) {
+          activeTouches.set(touch.identifier, {
+            x: touch.clientX,
+            y: touch.clientY
+          });
+        }
+      }
+      
+      // Si c'est le premier doigt qui a bougé, mettre à jour la position courante
+      if (e.changedTouches[0] && e.changedTouches[0].identifier === Array.from(activeTouches.keys())[0]) {
+        currentX = e.changedTouches[0].clientX;
+        currentY = e.changedTouches[0].clientY;
+        
+        // Et mettre à jour le son
+        if (continuousOscillator) {
+          updateContinuousSound(currentY);
+        }
+      }
+      
+      // Dessiner la traînée seulement pour le premier doigt
+      drawTrail();
+    }
+
+    // Fin de l'interaction tactile/glissement
+    function endInteraction(e) {
+      // Pour les événements tactiles, gérer les touchend individuels
+      if (e.changedTouches) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const touchId = e.changedTouches[i].identifier;
+          activeTouches.delete(touchId);
+        }
+        
+        // Mettre à jour le compteur de touches actives
+        activeTouchCount = activeTouches.size;
+        
+        // Si encore des doigts sur l'écran, ne pas terminer l'interaction
+        if (activeTouchCount > 0) return;
+      } else {
+        // Pour la souris, réinitialiser le compteur
+        activeTouchCount = 0;
+      }
+      
+      isDragging = false;
+      if (dragInterval) {
+        clearInterval(dragInterval);
+        dragInterval = null;
+      }
+      
+      stopContinuousSound();
+      
+      // Vider la Map des touches actives
+      activeTouches.clear();
+    }
+
+    // Événements tactiles et souris
+    canvas.addEventListener("touchstart", startInteraction, { passive: false });
+    canvas.addEventListener("mousedown", startInteraction);
+    canvas.addEventListener("touchmove", moveInteraction, { passive: false });
+    canvas.addEventListener("mousemove", (e) => { if (isDragging) moveInteraction(e); });
+    canvas.addEventListener("touchend", endInteraction);
+    canvas.addEventListener("touchcancel", endInteraction);
+    canvas.addEventListener("mouseup", endInteraction);
+    canvas.addEventListener("mouseleave", endInteraction);
+
+    // Apparition spontanée de bulles moins fréquente (toutes les 10 secondes) quand il n'y a pas d'interaction
+    let spontaneousInterval = null;
+    function startSpontaneousBubbles() {
+      spontaneousInterval = setInterval(() => {
+        if (!isDragging) {
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          createBubble(x, y, false, false); // Désactiver le son pour les bulles spontanées
+        }
+      }, 10000);
+    }
+    startSpontaneousBubbles();
+
+    // Valeurs pour l'effet de respiration du fond
+    let time = 0;
+    const breathSpeed = 0.001; // Vitesse de "respiration" du fond
+    
+    // Effet de variation des teintes apaisantes
+    let hueTime = 0;
+    const hueSpeed = 0.0005; // Vitesse de changement des teintes
+    
+    // Couleurs apaisantes (en teintes HSL)
+    // Bleus, verts, violets doux
+    const colors = [
+      { h: 190, s: 80, l: 35 }, // Bleu profond
+      { h: 210, s: 70, l: 40 }, // Bleu moyen
+      { h: 225, s: 60, l: 45 }, // Bleu-violet
+      { h: 240, s: 50, l: 50 }, // Violet doux
+      { h: 270, s: 40, l: 45 }, // Violet-mauve
+      { h: 180, s: 50, l: 40 }, // Turquoise
+      { h: 160, s: 60, l: 35 }  // Vert-bleu
+    ];
+
+    // Fonction pour obtenir une couleur douce en interpolant entre les couleurs définies
+    function getSmoothColor(t) {
+      // Trouver les deux couleurs à interpoler
+      const numColors = colors.length;
+      const position = (t % 1) * numColors;
+      const index = Math.floor(position);
+      const nextIndex = (index + 1) % numColors;
+      
+      // Facteur d'interpolation entre 0 et 1
+      const factor = position - index;
+      
+      // Interpoler entre les deux couleurs
+      const c1 = colors[index];
+      const c2 = colors[nextIndex];
+      
+      // Calculer la teinte en prenant le chemin le plus court
+      let h;
+      const h1 = c1.h;
+      const h2 = c2.h;
+      const diff = h2 - h1;
+      
+      if (Math.abs(diff) <= 180) {
+        h = h1 + diff * factor;
+      } else {
+        // Prendre le chemin le plus court sur le cercle des teintes
+        if (h1 < h2) {
+          h = h1 + (diff - 360) * factor;
+        } else {
+          h = h1 + (diff + 360) * factor;
+        }
+      }
+      
+      // Assurer que h est entre 0 et 360
+      h = ((h % 360) + 360) % 360;
+      
+      // Interpoler la saturation et la luminosité
+      const s = c1.s + (c2.s - c1.s) * factor;
+      const l = c1.l + (c2.l - c1.l) * factor;
+      
+      return { h, s, l };
+    }
+
+    // Fonction pour créer un dégradé radial respirant
+    function drawBreathingBackground() {
+      const width = canvas.width;
+      const height = canvas.height;
+      
+      // Calculer la pulsation (respiration)
+      const pulse = 0.5 + Math.sin(time) * 0.15;
+      
+      // Mise à jour du temps pour la prochaine frame
+      time += breathSpeed;
+      
+      // Mise à jour de la teinte actuelle
+      hueTime += hueSpeed;
+      const color = getSmoothColor(hueTime);
+      currentHue = color.h;
+      
+      // Créer les couleurs du dégradé basées sur la teinte actuelle
+      const innerColor = `hsl(${color.h}, ${color.s}%, ${color.l + 10}%)`;
+      const outerColor = `hsl(${color.h + 15}, ${color.s - 10}%, ${color.l - 10}%)`;
+      
+      // Position du centre du dégradé
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      // Rayon du dégradé qui "respire"
+      const minRadius = Math.min(width, height) * 0.5;
+      const radius = minRadius * pulse;
+      
+      // Créer un dégradé radial
+      const gradient = ctx.createRadialGradient(
+        centerX, centerY, radius * 0.1,
+        centerX, centerY, radius
+      );
+      
+      // Ajouter les couleurs au dégradé
+      gradient.addColorStop(0, innerColor);
+      gradient.addColorStop(1, outerColor);
+      
+      // Appliquer le dégradé
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+      
+      // Ajouter un subtil effet de brillance
+      const sparkleTime = performance.now() * 0.0005;
+      const sparkleOpacity = 0.05 + Math.sin(sparkleTime) * 0.02;
+      
+      ctx.save();
+      ctx.globalAlpha = sparkleOpacity;
+      ctx.fillStyle = `hsl(${color.h + 20}, ${color.s + 10}%, 85%)`;
+      
+      // Dessiner quelques points brillants subtils
+      for (let i = 0; i < 5; i++) {
+        const x = width * (0.3 + Math.sin(sparkleTime + i) * 0.2);
+        const y = height * (0.3 + Math.cos(sparkleTime + i * 1.5) * 0.2);
+        const size = Math.min(width, height) * (0.05 + Math.sin(sparkleTime * 1.2 + i) * 0.02);
+        
+        const sparkleGradient = ctx.createRadialGradient(
+          x, y, 0,
+          x, y, size
+        );
+        sparkleGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+        sparkleGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        
+        ctx.fillStyle = sparkleGradient;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      
+      // Mettre à jour la couleur de la croix
+      updateCloseBtnColor(color);
+    }
+
+    // Ajouter la gestion de la croix
+    const closeBtn = document.getElementById('closeBtn');
+    
+    // Fonction pour mettre à jour la couleur de la croix
+    function updateCloseBtnColor(color) {
+      closeBtn.style.color = `hsl(${color.h}, ${color.s}%, ${color.l + 20}%)`;
+    }
+
+    // Gestionnaire de clic pour la croix
+    closeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      // Arrêter proprement les sons et les intervalles
+      stopAllSounds();
+      if (dragInterval) {
+        clearInterval(dragInterval);
+      }
+      if (spontaneousInterval) {
+        clearInterval(spontaneousInterval);
+      }
+      if (audioCtx) {
+        audioCtx.close();
+      }
+      // Rediriger vers index.html
+      window.location.href = 'index.html';
+    });
+
+    // Variable pour contrôler l'animation
+    let animationActive = true;
+    let lastFrameTime = 0;
+    const TARGET_FPS = 60;
+    const FRAME_TIME = 1000 / TARGET_FPS;
+
+    // Boucle d'animation avec contrôle de framerate
+    function animate(timestamp) {
+      if (!animationActive) return;
+      
+      // Limiter le framerate pour les appareils moins puissants
+      if (timestamp - lastFrameTime < FRAME_TIME) {
+        requestAnimationFrame(animate);
+        return;
+      }
+      lastFrameTime = timestamp;
+      
+      // Effacer avant de dessiner
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Dessiner le fond respirant
+      ctx.globalAlpha = 1;
+      drawBreathingBackground();
+      
+      // Mettre à jour et dessiner les bulles
+      for (let i = bubbles.length - 1; i >= 0; i--) {
+        bubbles[i].update();
+        bubbles[i].draw(ctx);
+        if (bubbles[i].alpha <= 0) {
+          bubbles.splice(i, 1);
+        }
+      }
+      
+      requestAnimationFrame(animate);
+    }
+    
+    // Démarrer l'animation
+    requestAnimationFrame(animate);
+    
+    // Détection de la visibilité de la page pour économiser les ressources
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        animationActive = false;
+        if (dragInterval) {
+          clearInterval(dragInterval);
+          dragInterval = null;
+        }
+        if (spontaneousInterval) {
+          clearInterval(spontaneousInterval);
+          spontaneousInterval = null;
+        }
+        stopAllSounds();
+      } else {
+        animationActive = true;
+        requestAnimationFrame(animate);
+        startSpontaneousBubbles();
+      }
+    });
+  </script>
+</body>
+</html>
