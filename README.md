@@ -42,8 +42,7 @@ Cette expérience a été pensée pour être particulièrement adaptée aux beso
     * Stimulations sensorielles douces pour favoriser la détente et la concentration.
     * Absence de distractions inutiles pour une expérience recentrée sur l'essentiel.
 * **Bouton de Fermeture Facile :**
-    * Une croix discrète et bien visible en haut à gauche de l'écran permet de quitter l'expérience facilement à tout moment.
-
+    
 ## Comment Utiliser
 
 1. **Ouvrez le lien :** [https://toile-sensorielle.netlify.app/index.html](https://toile-sensorielle.netlify.app/index.html) dans votre navigateur web.
@@ -52,7 +51,9 @@ Cette expérience a été pensée pour être particulièrement adaptée aux beso
     * **Souris ou Dispositif de Pointage :** Cliquez et déplacez le curseur pour interagir.
     * **Contacteur :**  Utilisez un contacteur pour simuler un clic de souris (nécessite une configuration système additionnelle).
 3. **Profitez :** Laissez-vous porter par les couleurs, les sons et les sensations de cette toile sensorielle apaisante.
-4. **Quitter :** Cliquez sur la croix en haut à gauche de l'écran pour fermer l'expérience et revenir à la page précédente.
+
+Ou telecjzehez et installée le fichier apk sur un smartphone ou tablette Android
+
 
 ## Un Moment de Douceur Sensorielle
 
