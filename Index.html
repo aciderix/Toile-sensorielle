@@ -1,3 +1,4 @@
+--- START OF FILE touch (1).html ---
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -15,40 +16,9 @@
       width: 100vw;
       height: 100vh;
     }
-    #closeBtn {
-      position: fixed;
-      top: 20px;
-      left: 20px;
-      width: 30px;
-      height: 30px;
-      cursor: pointer;
-      z-index: 1000;
-      transition: transform 0.3s ease;
-    }
-    #closeBtn:hover {
-      transform: scale(1.1);
-    }
-    #closeBtn::before,
-    #closeBtn::after {
-      content: '';
-      position: absolute;
-      width: 100%;
-      height: 2px;
-      background-color: currentColor;
-      top: 50%;
-      left: 0;
-      transition: background-color 0.5s ease;
-    }
-    #closeBtn::before {
-      transform: rotate(45deg);
-    }
-    #closeBtn::after {
-      transform: rotate(-45deg);
-    }
   </style>
 </head>
 <body>
-  <div id="closeBtn"></div>
   <canvas id="canvas"></canvas>
   <script>
     const canvas = document.getElementById("canvas");
@@ -644,50 +614,19 @@
       }
       ctx.restore();
 
-      // Mettre à jour la couleur de la croix
-      updateCloseBtnColor(color);
+      // Mettre à jour la couleur de la croix (supprimé)
+      // updateCloseBtnColor(color);
     }
 
-    // Ajouter la gestion de la croix
-    const closeBtn = document.getElementById('closeBtn');
+    // Ajouter la gestion de la croix (supprimé)
+    // const closeBtn = document.getElementById('closeBtn');
+    // Fonction pour mettre à jour la couleur de la croix (supprimé)
+    // function updateCloseBtnColor(color) {
+    //   closeBtn.style.color = `hsl(${color.h}, ${color.s}%, ${color.l + 20}%)`;
+    // }
+    // Gestionnaire de clic pour la croix (supprimé)
+    // closeBtn.addEventListener('click', (e) => { ... });
 
-    // Fonction pour mettre à jour la couleur de la croix
-    function updateCloseBtnColor(color) {
-      closeBtn.style.color = `hsl(${color.h}, ${color.s}%, ${color.l + 20}%)`;
-    }
-
-    // Gestionnaire de clic pour la croix
-    closeBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      // Arrêter proprement les sons et les intervalles
-      stopAllSounds();
-      if (dragInterval) {
-        clearInterval(dragInterval);
-      }
-      if (spontaneousInterval) {
-        clearInterval(spontaneousInterval);
-      }
-      if (audioCtx) {
-        audioCtx.close();
-      }
-
-      // Vérifier si on est en plein écran
-      if (document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
-        // Quitter le plein écran
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        } else if (document.mozCancelFullScreen) { /* Firefox */
-          document.mozCancelFullScreen();
-        } else if (document.webkitExitFullscreen) { /* Chrome, Safari & Opera */
-          document.webkitExitFullscreen();
-        } else if (document.msExitFullscreen) { /* IE/Edge */
-          document.msExitFullscreen();
-        }
-      } else {
-        // Si pas en plein écran, fermer la page/onglet
-        window.close();
-      }
-    });
 
     // Variable pour contrôler l'animation
     let animationActive = true;
