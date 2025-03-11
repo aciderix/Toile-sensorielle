@@ -52,7 +52,7 @@ Cette expérience a été pensée pour être particulièrement adaptée aux beso
     * **Contacteur :**  Utilisez un contacteur pour simuler un clic de souris (nécessite une configuration système additionnelle).
 3. **Profitez :** Laissez-vous porter par les couleurs, les sons et les sensations de cette toile sensorielle apaisante.
 
-Ou telecjzehez et installée le fichier apk sur un smartphone ou tablette Android
+Ou telechaegez et installéz le fichier apk sur un smartphone ou tablette Android
 
 
 ## Un Moment de Douceur Sensorielle
